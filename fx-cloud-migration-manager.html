@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FXクラウド移行管理</title>
+<style>
+:root{--bg:#f6f8fb;--card:#fff;--text:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--good:#059669;--warn:#d97706;--bad:#dc2626;}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
+header{background:#111827;color:#fff;padding:18px 24px} header h1{margin:0;font-size:22px} header p{margin:6px 0 0;color:#cbd5e1;font-size:13px}
+main{max-width:1400px;margin:0 auto;padding:22px}
+.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.kpi .label{font-size:12px;color:var(--muted)}.kpi .value{font-size:26px;font-weight:700;margin-top:4px}.kpi .sub{font-size:11px;color:var(--muted);margin-top:2px}
+.section{margin-top:16px}.section h2{font-size:16px;margin:0 0 12px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}.field{display:flex;flex-direction:column;gap:4px}.field label{font-size:12px;color:var(--muted)}
+input,select,button{font:inherit} input,select{border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;background:white} button{border:0;border-radius:8px;padding:9px 12px;background:var(--accent);color:#fff;cursor:pointer}
+button.secondary{background:#4b5563} button.light{background:#e5e7eb;color:#111827} button.danger{background:#b91c1c}
+.progress{height:12px;background:#e5e7eb;border-radius:999px;overflow:hidden}.progress>div{height:100%;background:var(--good)}
+.status{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600}.s0{background:#f3f4f6}.s1{background:#dbeafe;color:#1d4ed8}.s2{background:#fef3c7;color:#92400e}.s3{background:#d1fae5;color:#065f46}
+table{width:100%;border-collapse:collapse;font-size:12px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap} th{position:sticky;top:0;background:#f9fafb;z-index:1}
+.tablewrap{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.chartbox{display:grid;grid-template-columns:1fr 1fr;gap:14px}.barrow{display:grid;grid-template-columns:120px 1fr 50px;gap:8px;align-items:center;margin:6px 0;font-size:12px}.bar{height:16px;background:#eef2f7;border-radius:5px;overflow:hidden}.bar>div{height:100%;background:#9ca3af}
+.small{font-size:12px;color:var(--muted)} .note{background:#eff6ff;border:1px solid #bfdbfe;padding:10px;border-radius:8px;font-size:12px}
+@media(max-width:1000px){.grid{grid-template-columns:repeat(2,1fr)}.chartbox{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>FXクラウド移行管理</h1>
+  <p>サービス終了予定日：2030年12月31日　｜　CSV取込・進捗管理・必要ペース算定</p>
+</header>
+<main>
+  <div class="card">
+    <div class="controls">
+      <div class="field"><label>基準日</label><input id="baseDate" type="date"></div>
+      <div class="field"><label>事務所内の移行完了目標日</label><input id="targetDate" type="date" max="2030-12-31"></div>
+      <div class="field"><label>CSVファイル</label><input id="csvFile" type="file" accept=".csv,text/csv"></div>
+      <button id="importBtn">CSV取込</button>
+      <button id="sampleBtn" class="light">CSVひな型</button>
+      <button id="exportBtn" class="secondary">現在データを書出し</button>
+      <button id="resetBtn" class="danger">全データ削除</button>
+    </div>
+    <div class="small" style="margin-top:10px">営業日：土日・祝日・盆（8/13〜16）・年末年始（12/29〜1/3）を除外。祝日は2026〜2030年分を内蔵しています。</div>
+  </div>
+
+  <div class="grid section">
+    <div class="card kpi"><div class="label">対象社数</div><div id="kTotal" class="value">0</div></div>
+    <div class="card kpi"><div class="label">完了</div><div id="kDone" class="value">0</div><div id="kPct" class="sub">0%</div></div>
+    <div class="card kpi"><div class="label">残り</div><div id="kRemain" class="value">0</div></div>
+    <div class="card kpi"><div class="label">残り営業日</div><div id="kDays" class="value">0</div></div>
+    <div class="card kpi"><div class="label">必要ペース / 月</div><div id="kMonth" class="value">0.0</div></div>
+    <div class="card kpi"><div class="label">必要ペース / 週</div><div id="kWeek" class="value">0.00</div></div>
+  </div>
+
+  <div class="card section">
+    <h2>全体進捗</h2>
+    <div class="progress"><div id="prog" style="width:0%"></div></div>
+    <div id="paceMsg" class="note" style="margin-top:10px">CSVを取り込むと必要ペースを判定します。</div>
+  </div>
+
+  <div class="chartbox section">
+    <div class="card"><h2>担当者別 残件数</h2><div id="staffBars"></div></div>
+    <div class="card"><h2>決算月別 残件数</h2><div id="monthBars"></div></div>
+  </div>
+
+  <div class="card section">
+    <h2>クライアント一覧</h2>
+    <div class="controls" style="margin-bottom:10px">
+      <div class="field"><label>担当者</label><select id="filterStaff"><option value="">すべて</option></select></div>
+      <div class="field"><label>状況</label><select id="filterStatus"><option value="">すべて</option><option>未着手</option><option>準備中</option><option>移行中</option><option>完了</option></select></div>
+      <div class="field"><label>検索</label><input id="filterText" placeholder="顧客名・コード・メモ"></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>顧客コード</th><th>顧客名</th><th>担当者</th><th>決算月</th><th>現行システム</th><th>状況</th><th>移行予定日</th><th>完了日</th><th>難易度</th><th>メモ</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<script>
+const DEADLINE='2030-12-31';
+const jpHolidays = new Set([
+'2026-09-21','2026-09-22','2026-09-23','2026-10-12','2026-11-03','2026-11-23',
+'2027-01-01','2027-01-11','2027-02-11','2027-02-23','2027-03-21','2027-03-22','2027-04-29','2027-05-03','2027-05-04','2027-05-05','2027-07-19','2027-08-11','2027-09-20','2027-09-23','2027-10-11','2027-11-03','2027-11-23',
+'2028-01-01','2028-01-10','2028-02-11','2028-02-23','2028-03-20','2028-04-29','2028-05-03','2028-05-04','2028-05-05','2028-07-17','2028-08-11','2028-09-18','2028-09-22','2028-10-09','2028-11-03','2028-11-23',
+'2029-01-01','2029-01-08','2029-02-11','2029-02-12','2029-02-23','2029-03-20','2029-04-29','2029-04-30','2029-05-03','2029-05-04','2029-05-05','2029-07-16','2029-08-11','2029-09-17','2029-09-23','2029-09-24','2029-10-08','2029-11-03','2029-11-23',
+'2030-01-01','2030-01-14','2030-02-11','2030-02-23','2030-03-20','2030-04-29','2030-05-03','2030-05-04','2030-05-05','2030-05-06','2030-07-15','2030-08-12','2030-09-16','2030-09-23','2030-10-14','2030-11-03','2030-11-04','2030-11-23'
+]);
+let rows = JSON.parse(localStorage.getItem('fxRows')||'[]');
+const $=id=>document.getElementById(id);
+function todayLocal(){const d=new Date(); return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+$('baseDate').value=localStorage.getItem('fxBase')||todayLocal();
+$('targetDate').value=localStorage.getItem('fxTarget')||DEADLINE;
+
+function isBusinessDay(d){
+ const dow=d.getDay(); if(dow===0||dow===6)return false;
+ const y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate();
+ const s=`${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+ if(jpHolidays.has(s)) return false;
+ if(m===8 && day>=13 && day<=16) return false;
+ if((m===12&&day>=29)||(m===1&&day<=3)) return false;
+ return true;
+}
+function businessDays(a,b){
+ let d=new Date(a+'T00:00:00'), end=new Date(b+'T00:00:00'), n=0;
+ while(d<=end){if(isBusinessDay(d))n++; d.setDate(d.getDate()+1)}
+ return n;
+}
+function normalizeHeader(s){return String(s||'').trim().toLowerCase().replace(/\s/g,'')}
+const aliases={
+ code:['顧客コード','コード','client_code','clientcode','関与先コード'],
+ name:['顧客名','client_name','clientname','会社名','関与先名'],
+ staff:['担当者','担当','staff','owner'],
+ closing:['決算月','closing_month','closingmonth'],
+ system:['現行システム','現行','system','current_system'],
+ status:['移行状況','状況','status','進捗'],
+ planned:['移行予定日','予定日','planned_date','target_date'],
+ completed:['完了日','移行完了日','completed_date'],
+ difficulty:['難易度','difficulty'],
+ memo:['メモ','備考','memo','note']
+};
+function mapHeaders(headers){
+ const map={}; Object.entries(aliases).forEach(([k,arr])=>{
+   const idx=headers.findIndex(h=>arr.map(normalizeHeader).includes(normalizeHeader(h))); map[k]=idx;
+ }); return map;
+}
+function parseCSV(text){
+ const out=[]; let row=[],cell='',q=false;
+ for(let i=0;i<text.length;i++){const c=text[i];
+   if(c=='"'){if(q&&text[i+1]=='"'){cell+='"';i++} else q=!q}
+   else if(c==','&&!q){row.push(cell);cell=''}
+   else if((c=='\n'||c=='\r')&&!q){if(c=='\r'&&text[i+1]=='\n')i++;row.push(cell);out.push(row);row=[];cell=''}
+   else cell+=c;
+ }
+ if(cell.length||row.length){row.push(cell);out.push(row)}
+ return out.filter(r=>r.some(x=>String(x).trim()!==''));
+}
+function csvEscape(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function save(){localStorage.setItem('fxRows',JSON.stringify(rows));localStorage.setItem('fxBase',$('baseDate').value);localStorage.setItem('fxTarget',$('targetDate').value)}
+function getStatus(r){return r.completed?'完了':(r.status||'未着手')}
+function statusClass(s){return s==='完了'?'s3':s==='移行中'?'s2':s==='準備中'?'s1':'s0'}
+function render(){
+ save();
+ const total=rows.length, done=rows.filter(r=>getStatus(r)==='完了').length, remain=total-done;
+ let target=$('targetDate').value||DEADLINE; if(target>DEADLINE){target=DEADLINE;$('targetDate').value=target}
+ const bd=businessDays($('baseDate').value,target);
+ const weeks=bd/5, months=bd/20.5, ppm=months>0?remain/months:0, ppw=weeks>0?remain/weeks:0, pct=total?done/total*100:0;
+ $('kTotal').textContent=total;$('kDone').textContent=done;$('kRemain').textContent=remain;$('kDays').textContent=bd;
+ $('kMonth').textContent=ppm.toFixed(1);$('kWeek').textContent=ppw.toFixed(2);$('kPct').textContent=pct.toFixed(1)+'%';$('prog').style.width=Math.min(100,pct)+'%';
+ const daysPer=remain?bd/remain:0;
+ let msg = remain===0 && total ? '全対象先の移行が完了しています。' :
+ total===0 ? 'CSVを取り込むと必要ペースを判定します。':
+ `残り${remain}社を目標日までに移行するには、月${ppm.toFixed(1)}社（週${ppw.toFixed(2)}社）、1社あたり平均${daysPer.toFixed(1)}営業日のペースが必要です。`;
+ $('paceMsg').textContent=msg;
+ const staffs=[...new Set(rows.map(r=>r.staff).filter(Boolean))].sort(); const cur=$('filterStaff').value;
+ $('filterStaff').innerHTML='<option value="">すべて</option>'+staffs.map(x=>`<option ${x===cur?'selected':''}>${x}</option>`).join('');
+ renderBars('staffBars',groupRemain('staff')); renderBars('monthBars',groupRemain('closing',true));
+ const fs=$('filterStaff').value, st=$('filterStatus').value, txt=$('filterText').value.toLowerCase();
+ const filtered=rows.filter(r=>(!fs||r.staff===fs)&&(!st||getStatus(r)===st)&&(!txt||Object.values(r).join(' ').toLowerCase().includes(txt)));
+ $('tbody').innerHTML=filtered.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.staff)}</td><td>${esc(r.closing)}</td><td>${esc(r.system)}</td><td><span class="status ${statusClass(getStatus(r))}">${esc(getStatus(r))}</span></td><td>${esc(r.planned)}</td><td>${esc(r.completed)}</td><td>${esc(r.difficulty)}</td><td>${esc(r.memo)}</td></tr>`).join('');
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function groupRemain(key,month=false){
+ const o={}; rows.filter(r=>getStatus(r)!=='完了').forEach(r=>{let k=r[key]||'未設定';if(month&&/^\d+$/.test(k))k=Number(k)+'月';o[k]=(o[k]||0)+1});
+ return Object.entries(o).sort((a,b)=>month?parseInt(a[0]) - parseInt(b[0]):b[1]-a[1]);
+}
+function renderBars(id,data){
+ const max=Math.max(1,...data.map(x=>x[1])); $(id).innerHTML=data.length?data.map(([k,v])=>`<div class="barrow"><div>${esc(k)}</div><div class="bar"><div style="width:${v/max*100}%"></div></div><div>${v}社</div></div>`).join(''):'<div class="small">データなし</div>';
+}
+$('importBtn').onclick=async()=>{
+ const f=$('csvFile').files[0]; if(!f){alert('CSVファイルを選択してください。');return}
+ const buf=await f.arrayBuffer(); let text;
+ try{text=new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){text=new TextDecoder('shift-jis').decode(buf)}
+ if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+ const data=parseCSV(text); if(data.length<2){alert('データ行がありません。');return}
+ const headers=data[0], m=mapHeaders(headers);
+ if(m.name<0){alert('「顧客名」列が見つかりません。ひな型をご確認ください。');return}
+ rows=data.slice(1).map(a=>({
+  code:m.code>=0?a[m.code].trim():'',name:a[m.name].trim(),staff:m.staff>=0?a[m.staff].trim():'',
+  closing:m.closing>=0?a[m.closing].trim():'',system:m.system>=0?a[m.system].trim():'',
+  status:m.status>=0?a[m.status].trim():'未着手',planned:m.planned>=0?a[m.planned].trim():'',
+  completed:m.completed>=0?a[m.completed].trim():'',difficulty:m.difficulty>=0?a[m.difficulty].trim():'',memo:m.memo>=0?a[m.memo].trim():''
+ })).filter(r=>r.name);
+ render();
+};
+$('sampleBtn').onclick=()=>{
+ const sample='顧客コード,顧客名,担当者,決算月,現行システム,移行状況,移行予定日,完了日,難易度,メモ\n001,株式会社サンプル,山田,3,FX2,未着手,2027-02-15,,中,操作指導あり\n';
+ download(sample,'fx-cloud-import-template.csv');
+};
+$('exportBtn').onclick=()=>{
+ const h=['顧客コード','顧客名','担当者','決算月','現行システム','移行状況','移行予定日','完了日','難易度','メモ'];
+ const lines=[h.join(','),...rows.map(r=>[r.code,r.name,r.staff,r.closing,r.system,getStatus(r),r.planned,r.completed,r.difficulty,r.memo].map(csvEscape).join(','))];
+ download('\ufeff'+lines.join('\r\n'),'fx-cloud-migration-data.csv');
+};
+function download(s,name){const b=new Blob([s],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
+$('resetBtn').onclick=()=>{if(confirm('取り込んだデータをすべて削除しますか？')){rows=[];render()}};
+['baseDate','targetDate','filterStaff','filterStatus','filterText'].forEach(id=>$(id).addEventListener(id==='filterText'?'input':'change',render));
+render();
+</script>
+</body>
+</html>
